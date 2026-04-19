@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Advanced Web Terminal</title>
+    <style>
+        :root {
+            --bg: #0c0c0c;
+            --fg: #cccccc;
+            --green: #00ff41;
+            --blue: #3b8eea;
+            --dir: #5e81ac;
+        }
+        body { background: #222; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        #terminal {
+            width: 90%; max-width: 900px; height: 80vh;
+            background: var(--bg); color: var(--fg);
+            font-family: 'Fira Code', 'Courier New', monospace;
+            padding: 15px; overflow-y: auto; border-radius: 5px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+        }
+        .line { margin-bottom: 4px; line-height: 1.4; white-space: pre-wrap; }
+        .prompt-user { color: var(--green); font-weight: bold; }
+        .prompt-dir { color: var(--blue); }
+        .input-wrap { display: flex; }
+        #cmd-input {
+            flex: 1; background: transparent; border: none; color: inherit;
+            font-family: inherit; font-size: inherit; outline: none; margin-left: 8px;
+        }
+        .ls-dir { color: var(--dir); font-weight: bold; margin-right: 15px; }
+        .ls-file { color: var(--fg); margin-right: 15px; }
+    </style>
+</head>
+<body>
+
+<div id="terminal" onclick="document.getElementById('cmd-input').focus()">
+    <div id="output">
+        <div class="line">Linux Web-Emulator (v2.0.4-release)</div>
+        <div class="line">Type 'help' to see all available commands.</div>
+        <div class="line">--------------------------------------------------</div>
+    </div>
+    <div class="input-wrap">
+        <span id="prompt-label"></span>
+        <input type="text" id="cmd-input" autofocus spellcheck="false" autocomplete="off">
+    </div>
+</div>
+
+<script>
+    const output = document.getElementById('output');
+    const input = document.getElementById('cmd-input');
+    const promptLabel = document.getElementById('prompt-label');
+
+    // --- 状态与文件系统 ---
+    let currentDir = "/home/user";
+    let history = [];
+    let historyIdx = 0;
+
+    const fileSystem = {
+        "/": ["bin", "etc", "home", "var"],
+        "/bin": ["ls", "cat", "help", "clear", "pwd"],
+        "/etc": ["hosts", "network", "passwd"],
+        "/home": ["user"],
+        "/home/user": ["documents", "projects", "readme.txt", "script.sh"],
+        "/home/user/documents": ["resume.pdf", "notes.txt"],
+        "/home/user/projects": ["web-term", "python-bot"]
+    };
+
+    // --- 初始化 ---
+    updatePrompt();
+
+    // --- 事件监听 ---
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const val = input.value.trim();
+            if (val) {
+                history.push(val);
+                historyIdx = history.length;
+            }
+            execute(val);
+            input.value = '';
+        } else if (e.key === 'ArrowUp') {
+            if (historyIdx > 0) {
+                historyIdx--;
+                input.value = history[historyIdx];
+            }
+            e.preventDefault();
+        } else if (e.key === 'ArrowDown') {
+            if (historyIdx < history.length - 1) {
+                historyIdx++;
+                input.value = history[historyIdx];
+            } else {
+                historyIdx = history.length;
+                input.value = '';
+            }
+        } else if (e.key === 'Tab') {
+            e.preventDefault();
+            handleTab();
+        }
+    });
+
+    // --- 核心逻辑 ---
+    function updatePrompt() {
+        promptLabel.innerHTML = `<span class="prompt-user">user@web-host</span>:<span class="prompt-dir">${currentDir}</span>$`;
+    }
+
+    function print(html) {
+        const div = document.createElement('div');
+        div.className = 'line';
+        div.innerHTML = html;
+        output.appendChild(div);
+        document.getElementById('terminal').scrollTop = document.getElementById('terminal').scrollHeight;
+    }
+
+    function execute(fullCmd) {
+        print(`${promptLabel.innerHTML} ${fullCmd}`);
+        if (!fullCmd) return;
+
+        const parts = fullCmd.split(/\s+/);
+        const cmd = parts[0].toLowerCase();
+        const args = parts.slice(1);
+
+        switch(cmd) {
+            case 'help':
+                print('Available commands: ls, cd, pwd, clear, whoami, date, echo, cat, ping, uname, history');
+                break;
+            case 'ls':
+                const items = fileSystem[currentDir] || [];
+                let res = "";
+                items.forEach(item => {
+                    const isDir = !item.includes('.');
+                    res += `<span class="${isDir ? 'ls-dir' : 'ls-file'}">${item}</span>`;
+                });
+                print(res || "(empty directory)");
+                break;
+            case 'pwd':
+                print(currentDir);
+                break;
+            case 'cd':
+                handleCd(args[0]);
+                break;
+            case 'clear':
+                output.innerHTML = '';
+                break;
+            case 'whoami':
+                print('user_demo');
+                break;
+            case 'date':
+                print(new Date().toLocaleString());
+                break;
+            case 'echo':
+                print(args.join(' '));
+                break;
+            case 'cat':
+                if (!args[0]) print("cat: missing file operand");
+                else if (args[0].includes('.')) print(`Reading content of ${args[0]}... \n[Simulation: This is a text file content.]`);
+                else print(`cat: ${args[0]}: Is a directory`);
+                break;
+            case 'ping':
+                if (!args[0]) print("ping: usage: ping &lt;host&gt;");
+                else print(`PING ${args[0]} (1.1.1.1) 56(84) bytes of data...<br>64 bytes from ${args[0]}: icmp_seq=1 ttl=64 time=12.4 ms`);
+                break;
+            case 'uname':
+                print("Linux web-emulator 5.15.0-generic #1-WebOS SMP x86_64");
+                break;
+            case 'history':
+                history.forEach((h, i) => print(`${i+1}  ${h}`));
+                break;
+            default:
+                print(`bash: ${cmd}: command not found`);
+        }
+    }
+
+    function handleCd(target) {
+        if (!target || target === "~") {
+            currentDir = "/home/user";
+        } else if (target === "..") {
+            if (currentDir !== "/") {
+                const parts = currentDir.split('/');
+                parts.pop();
+                currentDir = parts.join('/') || "/";
+            }
+        } else {
+            const newPath = target.startsWith('/') ? target : (currentDir === "/" ? "/" + target : currentDir + "/" + target);
+            if (fileSystem[newPath]) {
+                currentDir = newPath;
+            } else {
+                print(`cd: no such file or directory: ${target}`);
+            }
+        }
+        updatePrompt();
+    }
+
+    function handleTab() {
+        const val = input.value;
+        const items = fileSystem[currentDir] || [];
+        const match = items.find(i => i.startsWith(val.split(' ').pop()));
+        if (match) {
+            const parts = val.split(' ');
+            parts[parts.length - 1] = match;
+            input.value = parts.join(' ');
+        }
+    }
+</script>
+</body>
+</html>
